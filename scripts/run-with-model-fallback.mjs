@@ -64,7 +64,7 @@ export async function runModels({ binary, port, promptFile, logFile, exitFile, s
     `[model-fallback] OpenRouter fallback candidate appended: ${openRouterCandidateAppended ? 'yes' : 'no'}`,
     `[model-fallback] Candidate chain: ${candidates.join(', ')}`,
     ''
-  ].join('\\n'))
+  ].join('\n'))
   let sessionID = env.RESUME_SESSION_ID || '', child, interrupted = false, code = 1
   const attempts = []
   const stop = signal => { interrupted = true; child?.kill(signal) }
