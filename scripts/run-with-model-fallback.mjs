@@ -54,7 +54,17 @@ export async function runModels({ binary, port, promptFile, logFile, exitFile, s
   const candidates = [...new Set(models)]
   if (!candidates.length || candidates.some(model => typeof model !== 'string' || !/^[\w.-]+\/[\w./:-]+$/.test(model))) throw new Error('Invalid model fallback candidates')
   // Preserve the existing connected OpenRouter fallback after the free-model chain.
-  if (candidates.some(model => preferredFreeModels.includes(model)) && env.OPENROUTER_API_KEY && !candidates.includes('openrouter/cohere/north-mini-code:free')) candidates.push('openrouter/cohere/north-mini-code:free')
+  const openRouterConfigured = Boolean(env.OPENROUTER_API_KEY?.trim())
+  const openRouterEligible = candidates.some(model => preferredFreeModels.includes(model))
+  const openRouterCandidate = 'openrouter/cohere/north-mini-code:free'
+  const openRouterCandidateAppended = openRouterEligible && openRouterConfigured && !candidates.includes(openRouterCandidate)
+  if (openRouterCandidateAppended) candidates.push(openRouterCandidate)
+  appendFileSync(logFile, [
+    `[model-fallback] OpenRouter API key configured: ${openRouterConfigured ? 'yes' : 'no'}`,
+    `[model-fallback] OpenRouter fallback candidate appended: ${openRouterCandidateAppended ? 'yes' : 'no'}`,
+    `[model-fallback] Candidate chain: ${candidates.join(', ')}`,
+    ''
+  ].join('\\n'))
   let sessionID = env.RESUME_SESSION_ID || '', child, interrupted = false, code = 1
   const attempts = []
   const stop = signal => { interrupted = true; child?.kill(signal) }
