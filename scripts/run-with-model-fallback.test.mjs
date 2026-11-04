@@ -127,3 +127,24 @@ test('a fresh interrupted terminal outcome stops the model sequence', async () =
     assert.equal(result.attempts[0].outcome, 'interrupted')
   } finally { f.close() }
 })
+
+test('log OpenRouter diagnostics without exposing the API key', async () => {
+  for (const configured of [true, false]) {
+    const f = await fixture(['success'])
+    try {
+      const secret = 'DUMMY_SECRET_MUST_NOT_APPEAR'
+      const env = {
+        ...f.options.env,
+        OPENROUTER_API_KEY: configured ? secret : ''
+      }
+      await runModels({ ...f.options, env })
+      const log = readFileSync(f.options.logFile, 'utf8')
+      assert.match(log, new RegExp(`OpenRouter API key configured: ${configured ? 'yes' : 'no'}`))
+      assert.match(log, new RegExp(`OpenRouter fallback candidate appended: ${configured ? 'yes' : 'no'}`))
+      assert.equal(log.includes(secret), false)
+      assert.equal(log.includes('openrouter/cohere/north-mini-code:free'), configured)
+    } finally {
+      f.close()
+    }
+  }
+})
