@@ -74,8 +74,13 @@ test('stop immediately on success or unrelated failure; use connected fallback o
   const f = await fixture(['quota', 'quota', 'quota', 'quota', 'success'])
   try {
     const result = await runModels({ ...f.options, env: { ...f.options.env, OPENROUTER_API_KEY: 'configured' } })
+    const calls = JSON.parse(readFileSync(join(f.directory, 'calls.json')))
+    const expected = [...preferredFreeModels, 'cohere/north-mini-code:free']
     assert.equal(result.code, 0)
-    assert.equal(result.attempts.at(-1).model, 'cohere/north-mini-code:free')
+    assert.deepEqual(result.attempts.map(row => row.model), expected)
+    assert.equal(calls.length, 5)
+    assert.equal(result.attempts.filter(row => row.model === 'cohere/north-mini-code:free').length, 1)
+    assert.equal(readFileSync(join(f.directory, 'main-model'), 'utf8').trim(), 'cohere/north-mini-code:free')
   } finally { f.close() }
 })
 test('try Fusion first and advance to the free chain on its auth failure', async () => {
