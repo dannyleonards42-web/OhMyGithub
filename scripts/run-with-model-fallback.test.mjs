@@ -75,7 +75,7 @@ test('stop immediately on success or unrelated failure; use connected fallback o
   try {
     const result = await runModels({ ...f.options, env: { ...f.options.env, OPENROUTER_API_KEY: 'configured' } })
     assert.equal(result.code, 0)
-    assert.equal(result.attempts.at(-1).model, 'openrouter/cohere/north-mini-code:free')
+    assert.equal(result.attempts.at(-1).model, 'cohere/north-mini-code:free')
   } finally { f.close() }
 })
 test('try Fusion first and advance to the free chain on its auth failure', async () => {
@@ -142,7 +142,7 @@ test('log OpenRouter diagnostics without exposing the API key', async () => {
       assert.match(log, new RegExp(`OpenRouter API key configured: ${configured ? 'yes' : 'no'}`))
       assert.match(log, new RegExp(`OpenRouter fallback candidate appended: ${configured ? 'yes' : 'no'}`))
       assert.equal(log.includes(secret), false)
-      assert.equal(log.includes('openrouter/cohere/north-mini-code:free'), configured)
+      assert.equal(log.includes('cohere/north-mini-code:free'), configured)
     } finally {
       f.close()
     }

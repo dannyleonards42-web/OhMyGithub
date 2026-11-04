@@ -56,7 +56,7 @@ export async function runModels({ binary, port, promptFile, logFile, exitFile, s
   // Preserve the existing connected OpenRouter fallback after the free-model chain.
   const openRouterConfigured = Boolean(env.OPENROUTER_API_KEY?.trim())
   const openRouterEligible = candidates.some(model => preferredFreeModels.includes(model))
-  const openRouterCandidate = 'openrouter/cohere/north-mini-code:free'
+  const openRouterCandidate = 'cohere/north-mini-code:free'
   const openRouterCandidateAppended = openRouterEligible && openRouterConfigured && !candidates.includes(openRouterCandidate)
   if (openRouterCandidateAppended) candidates.push(openRouterCandidate)
   appendFileSync(logFile, [
