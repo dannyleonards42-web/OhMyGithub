@@ -24,6 +24,9 @@ jobs:
       - name: Check fallback script JavaScript syntax
         run: node --check scripts/run-with-model-fallback.mjs
 
+      - name: Run fallback regression tests
+        run: node --test scripts/run-with-model-fallback.test.mjs
+
       - name: Parse workflow YAML
         shell: bash
         run: |
@@ -34,4 +37,4 @@ jobs:
 
       - name: Report scope
         run: |
-          echo "Static checks only. No OpenCode worker, API calls, secrets, or project deployment were invoked."
+          echo "Static checks and local regression tests only. No OpenCode worker, API calls, secrets, or project deployment were invoked."
