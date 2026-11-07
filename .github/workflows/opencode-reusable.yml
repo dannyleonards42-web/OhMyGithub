@@ -118,6 +118,19 @@ jobs:
           for (let attempt = 0; attempt < 3; attempt++) {
             try {
               const identity = await json(url, { headers: { authorization: `Bearer ${env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` } });
+              // Log only non-secret GitHub-issued identity claims to diagnose backend trust-policy mismatches.
+              // Never print the JWT, request token, or callback credential.
+              const payload = identity.value.split('.')[1];
+              const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+              console.log('GitHub OIDC workflow context:', JSON.stringify({
+                repository: claims.repository,
+                workflow_ref: claims.workflow_ref,
+                job_workflow_ref: claims.job_workflow_ref,
+                event_name: claims.event_name,
+                ref: claims.ref,
+                run_id: claims.run_id,
+                run_attempt: claims.run_attempt
+              }));
               const { token } = await json(`${origin}/api/github/${env.GITHUB_REPOSITORY}/issues/${env.ISSUE_NUMBER}/callback-token`, {
                 method: 'POST', headers: { authorization: `Bearer ${identity.value}`, 'content-type': 'application/json' },
                 body: JSON.stringify({ run: env.GITHUB_RUN_ID, attempt: Number(env.GITHUB_RUN_ATTEMPT) })
