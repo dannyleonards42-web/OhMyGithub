@@ -60,4 +60,7 @@ test('defines the runtime directory before any failure path can reach always cle
   assert.ok(workflow.includes('RUNTIME_DIR=%s'))
   assert.ok(workflow.includes('name: Clean up OpenCode session'))
   assert.ok(workflow.includes('if: always()'))
+  assert.ok(workflow.includes('job_workflow_ref: claims.job_workflow_ref'))
+  assert.ok(workflow.includes('workflow_ref: claims.workflow_ref'))
+  assert.doesNotMatch(workflow, /console\\.log\\([^\\n]*(?:identity\\.value|CALLBACK_TOKEN)/)
 })
