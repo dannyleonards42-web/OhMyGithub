@@ -53,8 +53,8 @@ test('all shell status callbacks use millisecond sequences like lifecycle heartb
 
 test('defines the runtime directory before any failure path can reach always cleanup', () => {
   const workflow = read('.github/workflows/opencode-reusable.yml')
-  const job = workflow.split('  opencode:\\n')[1].split('\\n    steps:\\n')[0]
-  assert.match(job, /RUNTIME_DIR: \\$\\{\\{ runner\\.temp \\}\\}\\/omgithub-runtime/)
+  assert.match(workflow, /RUNTIME_DIR: \\$\\{\\{ runner\\.temp \\}\\}\\/omgithub-runtime/)
+  assert.ok(workflow.indexOf('RUNTIME_DIR: ${{ runner.temp }}/omgithub-runtime') < workflow.indexOf('name: Authenticate status callbacks'))
   assert.match(workflow, /name: Set worker paths outside the project[\\s\\S]*?RUNTIME_DIR=%s/)
   assert.match(workflow, /name: Clean up OpenCode session[\\s\\S]*?if: always\\(\\)/)
 })
