@@ -91,6 +91,9 @@ jobs:
       OMO_REQUEST: ${{ contains(inputs.labels_json, '"omo"') }}
       SSH_ONLY_REQUEST: ${{ contains(inputs.labels_json, '"ssh"') }}
       VALIDATION_ENABLED: ${{ vars.VALIDATION_ENABLED || 'true' }}
+      # Cleanup steps run with `always()`, including when authentication fails before path setup.
+      # Define the runtime path at job start so nounset-safe cleanup can always inspect it.
+      RUNTIME_DIR: ${{ runner.temp }}/omgithub-runtime
     steps:
       - name: Record job start time
         shell: bash
