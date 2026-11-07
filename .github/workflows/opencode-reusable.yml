@@ -365,7 +365,7 @@ jobs:
           set -euo pipefail
           password="$(openssl rand -hex 24)"
           echo "::add-mask::$password"
-          printf 'OPENCODE_PASSWORD=%s\nGOAL_REQUEST=false\nRALPH_REQUEST=false\nOMO_REQUEST=false\n' "$password" >> "$GITHUB_ENV"
+          printf 'OPENCODE_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
 
       - name: Configure Linux Playwright CLI with WebGPU
         timeout-minutes: 8

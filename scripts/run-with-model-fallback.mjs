@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const fusionModel = 'copilot-fusion-direct/fusion'
+export const supportedVariantModels = ['openai/gpt-6.1-sol', 'openai/gpt-6-astra']
 export const preferredFreeModels = ['opencode/deepseek-v4.1-flash-free', 'opencode/glm-5.3-flash-free', 'opencode/mimo-v2.6-flash-free', 'opencode/big-pickle']
 export function defaultModelChain(fusionEnabled = false) {
   return [...(fusionEnabled ? [fusionModel] : []), ...preferredFreeModels]
@@ -24,6 +25,7 @@ export function retryableProviderError(error) {
   if (!error || typeof error !== 'object') return false
   const type = String(error.type || ''), message = String(error.message || '')
   return [429, 500, 502, 503, 504].includes(Number(error.status)) || ['provider.free-limit', 'provider.rate-limit', 'provider.overloaded', 'provider.model-not-found'].includes(type) ||
+    message === 'Unexpected server error' ||
     /FreeUsageLimit|ModelDeprecated|model.*(?:not found|unavailable|deprecated)|free usage limit|rate.limit/i.test(message)
 }
 export function fusionFallbackError(model, error) {
@@ -56,7 +58,7 @@ export async function runModels({ binary, port, promptFile, logFile, exitFile, s
   // Preserve the existing connected OpenRouter fallback after the free-model chain.
   const openRouterConfigured = Boolean(env.OPENROUTER_API_KEY?.trim())
   const openRouterEligible = candidates.some(model => preferredFreeModels.includes(model))
-  const openRouterCandidate = 'cohere/north-mini-code:free'
+  const openRouterCandidate = 'openrouter/cohere/north-mini-code:free'
   const openRouterCandidateAppended = openRouterEligible && openRouterConfigured && !candidates.includes(openRouterCandidate)
   if (openRouterCandidateAppended) candidates.push(openRouterCandidate)
   appendFileSync(logFile, [
@@ -91,8 +93,9 @@ export async function runModels({ binary, port, promptFile, logFile, exitFile, s
         if (pending[name].length > 1024 * 1024) pending[name] = ''
       }
       try {
+        const variantArgs = supportedVariantModels.includes(model) && env.OPENCODE_VARIANT?.trim() ? ['--variant', env.OPENCODE_VARIANT.trim()] : []
         code = await new Promise(resolve => {
-          child = spawn(binary, ['run', ...(sessionID ? ['--session', sessionID] : []), '--auto', '--server', `http://127.0.0.1:${port}`, '--model', model, '--format', 'json', prompt], { cwd: env.PROJECT_DIR, env, stdio: ['ignore', 'pipe', 'pipe'] })
+          child = spawn(binary, ['run', ...(sessionID ? ['--session', sessionID] : []), '--auto', '--server', `http://127.0.0.1:${port}`, ...variantArgs, '--model', model, '--format', 'json', prompt], { cwd: env.PROJECT_DIR, env, stdio: ['ignore', 'pipe', 'pipe'] })
           for (const [name, stream] of [['out', child.stdout], ['err', child.stderr]]) stream.on('data', chunk => { writeSync(fd, chunk); inspect(name, chunk.toString()) })
           child.on('error', () => resolve(1))
           child.on('close', (status, signal) => { inspect('out', '', true); inspect('err', '', true); resolve(signal ? 128 + (signal === 'SIGINT' ? 2 : 15) : status ?? 1) })
