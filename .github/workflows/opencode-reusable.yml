@@ -365,7 +365,7 @@ jobs:
           set -euo pipefail
           password="$(openssl rand -hex 24)"
           echo "::add-mask::$password"
-          printf 'OPENCODE_PASSWORD=%s\nGOAL_REQUEST=false\nRALPH_REQUEST=false\nOMO_REQUEST=false\n' "$password" >> "$GITHUB_ENV"
+          printf 'OPENCODE_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
 
       - name: Configure Linux Playwright CLI with WebGPU
         timeout-minutes: 8
@@ -1057,11 +1057,11 @@ jobs:
           done
           ((${#release_assets[@]} > 0))
 
-          tag="opencode-logs-${GITHUB_RUN_ID}"
+          tag="opencode-logs-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
           gh release create "$tag" "${release_assets[@]}" \
             --target "$TARGET_SHA" \
-            --title "OpenCode logs for run #${GITHUB_RUN_NUMBER}" \
-            --notes "Generated OpenCode response and execution logs for workflow run [#${GITHUB_RUN_NUMBER}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})." \
+            --title "OpenCode logs for run #${GITHUB_RUN_NUMBER}, attempt #${GITHUB_RUN_ATTEMPT}" \
+            --notes "Generated OpenCode response and execution logs for workflow run [#${GITHUB_RUN_NUMBER}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}), attempt #${GITHUB_RUN_ATTEMPT}." \
             --latest=false
 
         env:

@@ -1,0 +1,40 @@
+name: Validate fallback diagnostics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-fallback-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Static validation only
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the selected branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Check fallback script JavaScript syntax
+        run: node --check scripts/run-with-model-fallback.mjs
+
+      - name: Run fallback regression tests
+        run: node --test scripts/run-with-model-fallback.test.mjs
+
+      - name: Parse workflow YAML
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -e 'require "yaml"; ARGV.each { |file| YAML.parse_file(file); puts "YAML syntax OK: #{file}" }' \
+            .github/workflows/opencode-reusable.yml \
+            .github/workflows/validate-fallback-diagnostics.yml
+
+      - name: Report scope
+        run: |
+          echo "Static checks and local regression tests only. No OpenCode worker, API calls, secrets, or project deployment were invoked."

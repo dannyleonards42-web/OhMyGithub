@@ -3,7 +3,16 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { runModels, modelCandidates, preferredFreeModels, retryableProviderError, terminalAttemptOutcome, defaultModelChain, fusionFallbackError, fusionModel } from './run-with-model-fallback.mjs'
+import { runModels, modelCandidates, preferredFreeModels, retryableProviderError, terminalAttemptOutcome, defaultModelChain, fusionFallbackError, fusionModel, supportedVariantModels } from './run-with-model-fallback.mjs'
+
+test('workflow Select OpenCode runtime step writes only OPENCODE_PASSWORD to GITHUB_ENV and does not overwrite mode variables', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/opencode-reusable.yml', import.meta.url), 'utf8')
+  const step = workflow.slice(workflow.indexOf('- name: Select OpenCode runtime'), workflow.indexOf('- name: Configure Linux Playwright CLI'))
+  assert.match(step, /printf 'OPENCODE_PASSWORD=%s\\n' "\$password" >> "\$GITHUB_ENV"/)
+  assert.doesNotMatch(step, /GOAL_REQUEST/)
+  assert.doesNotMatch(step, /RALPH_REQUEST/)
+  assert.doesNotMatch(step, /OMO_REQUEST/)
+})
 
 test('order preferred free candidates and preserve explicitly chosen non-free models', () => {
   assert.deepEqual(modelCandidates(preferredFreeModels[0]), preferredFreeModels)
@@ -20,8 +29,13 @@ test('order preferred free candidates and preserve explicitly chosen non-free mo
   assert.deepEqual(modelCandidates(fusionModel, null, preferredFreeModels), [fusionModel])
 })
 test('only retry structured provider/model availability failures', () => {
-  for (const error of [{ type: 'provider.free-limit' }, { status: 429 }, { status: 503 }, { message: 'ModelDeprecated' }]) assert.equal(retryableProviderError(error), true)
-  for (const error of [undefined, { type: 'tool.error' }, { status: 401 }, { message: 'Game build failed' }]) assert.equal(retryableProviderError(error), false)
+  for (const error of [{ type: 'provider.free-limit' }, { status: 429 }, { status: 503 }, { message: 'ModelDeprecated' }, { message: 'Unexpected server error' }]) {
+    assert.equal(retryableProviderError(error), true)
+  }
+  for (const error of [undefined, { type: 'tool.error' }, { status: 401 }, { status: 402 }, { message: 'Game build failed' }, { message: 'Unexpected server error during test run' }, { message: ' Unexpected server error ' }]) {
+    assert.equal(retryableProviderError(error), false)
+  }
+  assert.equal(retryableProviderError({ message: ' Unexpected server error ' }), false)
 })
 test('advance from Fusion on auth, quota, gateway, and route failures only', () => {
   for (const error of [{ status: 401 }, { status: 429 }, { message: 'Copilot /auto returned HTTP 429' }, { message: 'Refuse fallback or GPT-4.1 route' }, { message: 'Unexpected server error' }]) assert.equal(fusionFallbackError(fusionModel, error), true)
@@ -36,12 +50,67 @@ const fs=require('node:fs'),p=require('node:path'),args=process.argv.slice(2),f=
 const calls=fs.existsSync(f)?JSON.parse(fs.readFileSync(f)):[];calls.push(args);fs.writeFileSync(f,JSON.stringify(calls));
 const outcome=JSON.parse(process.env.PATTERN)[calls.length-1]||'success';
 console.log(JSON.stringify({type:'step_start',sessionID:'ses_main'}));
-if(outcome!=='success')console.log(JSON.stringify({type:'error',sessionID:'ses_main',error:outcome==='fatal'?{type:'tool.error',message:'Build failed'}:outcome==='fusion-auth'?{type:'provider.auth',status:401,message:'Copilot /auto returned HTTP 401'}:{type:'provider.free-limit',status:429}}));
+if(outcome!=='success')console.log(JSON.stringify({type:'error',sessionID:'ses_main',error:outcome==='fatal'?{type:'tool.error',message:'Build failed'}:outcome==='fusion-auth'?{type:'provider.auth',status:401,message:'Copilot /auto returned HTTP 401'}:outcome==='unexpected-server'?{type:'error',message:'Unexpected server error'}:outcome==='payment-required'?{status:402,message:'Payment Required'}:{type:'provider.free-limit',status:429}}));
 process.exit(outcome==='success'||outcome==='zero-error'?0:1);
 `, { mode: 0o755 })
   return { directory, prompt, options: { binary, port: 4096, promptFile: join(directory, 'prompt'), logFile: join(directory, 'run.log'), exitFile: join(directory, 'run.exit'), selected: preferredFreeModels[0], models: preferredFreeModels,
     env: { ...process.env, OPENROUTER_API_KEY: '', PROJECT_DIR: directory, PATTERN: JSON.stringify(pattern), RESUME_SESSION_ID: resume } }, close: () => rmSync(directory, { recursive: true, force: true }) }
 }
+test('pass the configured reasoning variant only to supported models and omit for fallback models', async () => {
+  const f = await fixture(['quota', 'success'])
+  try {
+    f.options.env.OPENCODE_VARIANT = 'high'
+    f.options.models = ['openai/gpt-6-astra', preferredFreeModels[0]]
+    f.options.selected = 'openai/gpt-6-astra'
+    const result = await runModels(f.options)
+    const calls = JSON.parse(readFileSync(join(f.directory, 'calls.json')))
+    assert.equal(result.code, 0)
+    assert.equal(calls.length, 2)
+    const index0 = calls[0].indexOf('--variant')
+    assert.notEqual(index0, -1)
+    assert.equal(calls[0][index0 + 1], 'high')
+    assert.equal(calls[1].includes('--variant'), false)
+  } finally { f.close() }
+})
+
+test('omit the reasoning variant when it is not configured', async () => {
+  const f = await fixture(['success'])
+  try {
+    delete f.options.env.OPENCODE_VARIANT
+    f.options.models = ['openai/gpt-6-astra']
+    f.options.selected = 'openai/gpt-6-astra'
+    const result = await runModels(f.options)
+    const calls = JSON.parse(readFileSync(join(f.directory, 'calls.json')))
+    assert.equal(result.code, 0)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].includes('--variant'), false)
+  } finally { f.close() }
+})
+
+test('advance fallback on Unexpected server error and succeed on subsequent candidate', async () => {
+  const f = await fixture(['unexpected-server', 'success'])
+  try {
+    const result = await runModels(f.options)
+    const calls = JSON.parse(readFileSync(join(f.directory, 'calls.json')))
+    assert.equal(result.code, 0)
+    assert.equal(calls.length, 2)
+    assert.equal(result.attempts[0].retryable, true)
+    assert.equal(result.attempts[0].model, preferredFreeModels[0])
+    assert.equal(result.attempts[1].model, preferredFreeModels[1])
+  } finally { f.close() }
+})
+
+test('HTTP 402 payment required does not trigger fallback and terminates attempt', async () => {
+  const f = await fixture(['payment-required', 'success'])
+  try {
+    const result = await runModels(f.options)
+    const calls = JSON.parse(readFileSync(join(f.directory, 'calls.json')))
+    assert.equal(result.code, 1)
+    assert.equal(calls.length, 1)
+    assert.equal(result.attempts[0].retryable, false)
+  } finally { f.close() }
+})
+
 test('try the sequence until success; retain exact prompt and main session across attempts', async () => {
   const f = await fixture(['quota', 'quota', 'success'])
   try {
@@ -74,8 +143,13 @@ test('stop immediately on success or unrelated failure; use connected fallback o
   const f = await fixture(['quota', 'quota', 'quota', 'quota', 'success'])
   try {
     const result = await runModels({ ...f.options, env: { ...f.options.env, OPENROUTER_API_KEY: 'configured' } })
+    const calls = JSON.parse(readFileSync(join(f.directory, 'calls.json')))
+    const expected = [...preferredFreeModels, 'openrouter/cohere/north-mini-code:free']
     assert.equal(result.code, 0)
-    assert.equal(result.attempts.at(-1).model, 'openrouter/cohere/north-mini-code:free')
+    assert.deepEqual(result.attempts.map(row => row.model), expected)
+    assert.equal(calls.length, 5)
+    assert.equal(result.attempts.filter(row => row.model === 'openrouter/cohere/north-mini-code:free').length, 1)
+    assert.equal(readFileSync(join(f.directory, 'main-model'), 'utf8').trim(), 'openrouter/cohere/north-mini-code:free')
   } finally { f.close() }
 })
 test('try Fusion first and advance to the free chain on its auth failure', async () => {
@@ -126,4 +200,25 @@ test('a fresh interrupted terminal outcome stops the model sequence', async () =
     assert.equal(result.attempts.length, 1)
     assert.equal(result.attempts[0].outcome, 'interrupted')
   } finally { f.close() }
+})
+
+test('log OpenRouter diagnostics without exposing the API key', async () => {
+  for (const configured of [true, false]) {
+    const f = await fixture(['success'])
+    try {
+      const secret = 'DUMMY_SECRET_MUST_NOT_APPEAR'
+      const env = {
+        ...f.options.env,
+        OPENROUTER_API_KEY: configured ? secret : ''
+      }
+      await runModels({ ...f.options, env })
+      const log = readFileSync(f.options.logFile, 'utf8')
+      assert.match(log, new RegExp(`OpenRouter API key configured: ${configured ? 'yes' : 'no'}`))
+      assert.match(log, new RegExp(`OpenRouter fallback candidate appended: ${configured ? 'yes' : 'no'}`))
+      assert.equal(log.includes(secret), false)
+      assert.equal(log.includes('openrouter/cohere/north-mini-code:free'), configured)
+    } finally {
+      f.close()
+    }
+  }
 })

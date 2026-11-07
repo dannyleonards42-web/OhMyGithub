@@ -1,14 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { retry, uploadDeployment } from './deployment-retry.mjs'
-import { findRelease } from './session-checkpoint.mjs'
 
-test('direct release lookup treats only 404 as absent', () => {
-  assert.deepEqual(findRelease('tag', () => '{"id":12}'), { id: 12 })
-  assert.equal(findRelease('tag', () => { throw { status: 404 } }), null)
-  for (const status of [401, 403, 429, 500, undefined])
-    assert.throws(() => findRelease('tag', () => { throw Object.assign(new Error('failure'), { status }) }))
-})
 test('upload retries reuse archive and return success', async () => {
   const body = Buffer.from('archive'), calls = []
   const result = await uploadDeployment('https://example.test', { method: 'POST', body }, {

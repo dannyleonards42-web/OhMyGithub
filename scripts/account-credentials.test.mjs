@@ -43,13 +43,11 @@ test('environment file delimiters and workflow masking escape command characters
   assert.match(readFileSync(file, 'utf8'), /^CUSTOM_KEY<<omgithub_/)
   assert.equal(escapeCommand('a%\r\nb'), 'a%25%0D%0Ab')
 })
-test('High models set CLI reasoning variant in all OpenCode invocation modes', () => {
+test('High models pass the CLI reasoning variant through the fallback runner', () => {
   const workflow = readFileSync(new URL('../.github/workflows/opencode-reusable.yml', import.meta.url), 'utf8')
   assert.match(workflow, /\['openai\/gpt-6.1-sol', 'openai\/gpt-6-astra'\].includes\(model\) \? 'high'/)
-  assert.match(workflow, /variant_args=\(--variant "\$OPENCODE_VARIANT"\)/)
-  const invocations = workflow.split('\n').filter(line => line.includes('"$1" run'))
-  assert.equal(invocations.length, 5)
-  for (const line of invocations) assert.ok(line.includes('"${variant_args[@]}"'))
+  assert.match(workflow, /OPENCODE_VARIANT:\s*\$\{\{\s*steps\.opencode_labels\.outputs\.variant\s*\}\}/)
+  assert.match(workflow, /node "\$RUNTIME_DIR\/scripts\/run-with-model-fallback\.mjs"/)
 })
 
 
